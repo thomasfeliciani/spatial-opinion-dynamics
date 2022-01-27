@@ -1,0 +1,441 @@
+---
+title: "Calibration script"
+output: html_document
+---
+This script loads in the raw data from the CBS and outputs the spatial data needed by the simulation model.
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Importing data
+Loading squares data.  
+*vk* is where we store the rasterized demographic statistics from the CBS;  
+*rast* is where we store the full raster, including the cells unavailable in *vk* because uninhabited. This will come handy when we'll move agents around and some of them might be placed in cells that don't exist in *vk* but are present in *rast*.
+*Note: loading these datasets takes several minutes and requires a generous amount of memory.*
+```{r, warning = FALSE, message = FALSE, results = FALSE}
+library("rgdal")
+library("sp")
+vk <- rgdal::readOGR(
+  dsn = "./geoData/2021-cbs_vk100_2020_v1",
+  layer = "CBS_vk100_2020_v1"
+)
+rast <- rgdal::readOGR(
+  dsn = "./geoData/NL_vierkant_100meter_bij_100meter",
+  layer = "NL_vierkant100m"
+)
+```
+
+We get rid of the shape information and only keep what we need: the coordinates
+of each square and its demographic statistics. We also remove all squares with
+fewer than five residents (*vkd$INWONER == -99997*), as the demographic 
+composition of these squares is not provided.  
+```{r}
+vk <- vk@data
+vk$INWONER <- as.numeric(vk$INWONER)
+vk <- subset(vk, vk$INWONER != -99997)
+```
+
+
+Next we load the shapefile. We will use the shapefile to identify which square units (from the raster) belong to which neighborhood, district or city in the Netherlands.  
+*Note: this too will take a few minutes.*
+```{r, warning = FALSE, message = FALSE, results = FALSE}
+buurtShape <- rgdal::readOGR(
+  dsn = "./geoData/WijkBuurtkaart_2019_v3",
+  layer = "buurt_2019_v3"
+)
+```
+
+
+## Formatting coordinates
+Defining a function that converts the coordinates from the *Rijksdriehoek* format to WGS84:
+```{r}
+rd2wgs84 <- function(X, Y)
+{
+  #http://www.dekoepel.nl/pdf/Transformatieformules.pdf
+  #basispunten definieren
+  X0 <- 155000.00 
+  Y0 <- 463000.00 
+  j0 <- 52.15517440
+  l0 <- 5.38720621
+  #coefficienten definieren
+  K01<- 3235.65389 
+  K20<- -32.58297
+  K02<- -0.24750 
+  K21<- -0.84978 
+  K03<- -0.06550 
+  K22<- -0.01709 
+  K10<- -0.00738 
+  K40<- 0.00530 
+  K23<- -0.00039 
+  K41<- 0.00033 
+  K11<- -0.00012 
+  
+  L10<- 5260.52916
+  L11<- 105.94684
+  L12<- 2.45656
+  L30<- -0.81885
+  L13<- 0.05594
+  L31<- -0.05607
+  L01<- 0.01199
+  L32<- -0.00256
+  L14<- 0.00128
+  L02<- 0.00022
+  L20<- -0.00022
+  L50<- 0.00026
+  
+  dX <- (X - X0)*10^-5
+  dY <- (Y - Y0)*10^-5 
+  {
+    j <- j0 + 
+      (
+        K01*dX^0*dY^1 +
+          K02*dX^0*dY^2 +
+          K03*dX^0*dY^3 +
+          K10*dX^1*dY^0 +
+          K20*dX^2*dY^0 +
+          K21*dX^2*dY^1 +
+          K22*dX^2*dY^2 +
+          K23*dX^1*dY^3 +
+          K40*dX^2*dY^0 +
+          K41*dX^2*dY^1 
+      )/3600
+  }
+  
+  {
+    l <- l0 + 
+      (
+        L10*dX^1*dY^0 +
+          L11*dX^1*dY^1 +
+          L12*dX^1*dY^2 +
+          L30*dX^3*dY^0 +
+          L13*dX^1*dY^3 +
+          L31*dX^3*dY^1 +
+          L01*dX^0*dY^1 +
+          L32*dX^3*dY^2 +
+          L14*dX^1*dY^4 +
+          L02*dX^0*dY^2 +
+          L20*dX^2*dY^0 +
+          L50*dX^5*dY^0 
+      )/3600
+  }
+  wgs84<-cbind(j,l)
+  return(wgs84)
+}
+```
+
+We extract the coordinates from the square data (*vk* and *rast*) and from the shapefile (*buurtShape*). We convert them all to WGS84.
+```{r, warning = FALSE}
+vk$E <- as.numeric(substr(
+  as.character(vk$c28992r100),
+  start = 2,
+  stop = 5
+))
+vk$N <- as.numeric(substr(
+  as.character(vk$c28992r100),
+  start = 7,
+  stop = length(as.character(vk$c28992r100))
+))
+
+rast$E <- as.numeric(substr(
+  as.character(rast$C28992R100),
+  start = 2,
+  stop = 5
+))
+rast$N <- as.numeric(substr(
+  as.character(rast$C28992R100),
+  start = 7,
+  stop = length(as.character(rast$C28992R100))
+))
+
+
+# The coordinates of each square (vkd$E and vkd$N) point at their south-west
+# corners. The format of these coordinates makes it easy to find the centroid:
+vk$east <- (vk$E * 100) + 50 # (meters)
+vk$north <- (vk$N * 100) + 50
+rast$east <- (rast$E * 100) + 50
+rast$north <- (rast$N * 100) + 50
+
+# Transforming the cbs coordinate system to WGS-84
+vkWGS84 <- rd2wgs84(vk$east, vk$north)
+vk$E <- vkWGS84[,2]
+vk$N <- vkWGS84[,1]
+sp::coordinates(vk) = c("E","N")
+
+rastWGS84 <- rd2wgs84(rast$east, rast$north)
+rast$E <- rastWGS84[,2]
+rast$N <- rastWGS84[,1]
+rast <- rast@data
+sp::coordinates(rast) = c("E","N")
+
+# Make sure same coordinate system
+buurtShape <- sp::spTransform(buurtShape, CRS("+proj=longlat +ellps=WGS84")) 
+llCRS <- sp::CRS("+proj=longlat +ellps=WGS84")
+
+# Making spatialpoints object
+vksp <- sp::SpatialPoints(vk, proj4string = llCRS)
+proj4string(rast) <- proj4string(buurtShape)
+```
+
+
+Now we have all we need for joining raster and shape data, which allows us to finally assign to each square its corresponding neighborhood (*BU_CODE* and *BU_NAAM*), district (*WK_CODE*), municipality (*GM_CODE* and *GM_NAAM*) and postcode (*POSTCODE*) information.
+```{r, warning = FALSE, message = FALSE, results = FALSE}
+vkbu <- sp::over(vksp, buurtShape)
+vk$BU_CODE <- vkbu$BU_CODE
+vk$BU_NAAM <- vkbu$BU_NAAM
+vk$WK_CODE <- vkbu$WK_CODE
+vk$GM_CODE <- vkbu$GM_CODE
+vk$GM_NAAM <- vkbu$GM_NAAM
+vk$POSTCODE <- vkbu$POSTCODE
+rm(vkbu, vksp, vkWGS84, rastWGS84, llCRS); gc() # some memory management
+
+rastbu <- sp::over(rast, buurtShape)
+rast$BU_CODE <- rastbu$BU_CODE
+rast$BU_NAAM <- rastbu$BU_NAAM
+rast$WK_CODE <- rastbu$WK_CODE
+rast$GM_CODE <- rastbu$GM_CODE
+rast$GM_NAAM <- rastbu$GM_NAAM
+rast$POSTCODE <- rastbu$POSTCODE
+rm(rastbu, buurtShape); gc()
+```
+
+
+We save our progress so far:
+```{r}
+save(vk, rast, file = "./geoData/geoData.RData")
+#.rs.restartR() # Restarts the R session, if garbage collection fails (it does occasionally on Rstudio)
+```
+
+
+## Recoding variables and trimming maps
+Loading our file and renaming some variables. *INWONER* is the density, or number of residents, of each square; *P_NW_MIG_A* is the percentage of residents with a non-western migration background
+```{r}
+load("./geoData/geoData.RData")
+vk$density <- vk$INWONER
+vk$pnw <- as.numeric(vk$P_NW_MIG_A)
+```
+
+We need to make a simplifying assumption here. Squares statistics are not provided if they apply to fewer than 5 residents or if there are overall less than 10 residents. In the CBS's codebook this class is labelled "*0 tot en met 4 / geheim*" and coded "*-99997*". We need to decide how to treat this category. The easiest assumption is just to assume that the category marked as applying to fewer than 5 residents is just empty.
+```{r}
+vk$pnw[vk$pnw == -99997] <- 0 
+vk$pnw <- vk$pnw / 100 # turning the percentage into a proportion
+```
+
+
+Since we are only interested in a few districts of Rotterdam, here we remove all other districts.
+```{r}
+districtsList <- c(
+  "WK059901",
+  "WK059903",
+  "WK059904",
+  "WK059905",
+  "WK059906",
+  "WK059908",
+  "WK059910",
+  "WK059912",
+  "WK059913",
+  "WK059914",
+  "WK059915",
+  "WK059916"
+)
+districtsNames <- c(
+  "Stadscentrum",
+  "Delfshaven",
+  "Overschie",
+  "Noord",
+  "Hillegersberg-Schiebroek",
+  "Kralingen-Crooswijk",
+  "Feijenoord",
+  "IJsselmonde",
+  "Pernis",
+  "Prins Alexander",
+  "Charlois",
+  "Hoogvliet"
+)
+vkR <- subset(vk, vk$WK_CODE %in% districtsList)
+```
+
+
+Remember how we have a dataframe *rast* that includes the cells not present in *vk* because uninhabited? Well, now it's time we trim *rast*, keeping only the cells within the boundary of Rotterdam. We add some padding: in other words, we also keep cells that are "close" to the boundary of Rotterdam. We need this padding when we randomize agents' position, and some agents might be placed just outside of the original boundary. So:
+```{r}
+padding <- 2000 # 2 km
+minEast <- min(vkR$east) - padding
+maxEast <- max(vkR$east) + padding
+minNorth <- min(vkR$north) - padding
+maxNorth <- max(vkR$north) + padding
+rastR <- subset(
+  rast,
+  rast$east >= minEast & rast$east <= maxEast &
+    rast$north >= minNorth & rast$north <= maxNorth
+)
+```
+
+
+Each square unit in Rotterdam now has a district code *WK_CODE*. We use the district code to assigh each square its proper district name, *district*.
+```{r}
+vkR$district <- NA
+rastR$district <- NA
+for (w in 1:length(districtsList)) {
+  vkR$district[vkR$WK_CODE == districtsList[w]] <- districtsNames[w]
+  rastR$district[rastR$WK_CODE == districtsList[w]] <- districtsNames[w]
+}
+table(vkR$district)
+table(rastR$district)
+```
+
+
+We save our progress so far, keeping (and renaming) only the variables we need:
+```{r}
+vk <- data.frame(
+  id = 1:nrow(vkR),
+  rdCoords = vkR$c28992r100,
+  east = vkR$E,
+  north = vkR$N,
+  neighborhood = vkR$BU_NAAM,
+  idNeighborhood = vkR$BU_CODE,
+  district = vkR$district,
+  idDistrict = vkR$WK_CODE,
+  municipality = vkR$GM_NAAM,
+  idMunicipality = vkR$GM_CODE,
+  postcode = vkR$POSTCODE,
+  density = vkR$density,
+  pnw = vkR$pnw
+)
+rast <- data.frame(
+  id = 1:nrow(rastR),
+  rdCoords = rastR$C28992R100,
+  east = rastR$E,
+  north = rastR$N,
+  neighborhood = rastR$BU_NAAM,
+  idNeighborhood = rastR$BU_CODE,
+  district = rastR$district,
+  idDistrict = rastR$WK_CODE,
+  municipality = rastR$GM_NAAM,
+  idMunicipality = rastR$GM_CODE,
+  postcode = rastR$POSTCODE
+)
+save(vk, rast, districtsList, districtsNames, file = "./geoData/geoData.RData")
+
+ggplot2::ggplot(
+  rast, ggplot2::aes(x = east, y = north, color = municipality)) +
+  ggplot2::scale_x_continuous(limits = c(min(rast$east), max(rast$east))) +
+  ggplot2::scale_y_continuous(limits = c(min(rast$north), max(rast$north))) +
+  ggplot2::geom_point() + ggplot2::ggtitle("raster cells by municipality")
+ggplot2::ggplot(
+  vk, ggplot2::aes(x = east, y = north, color = district)) +
+  ggplot2::scale_x_continuous(limits = c(min(rast$east), max(rast$east))) +
+  ggplot2::scale_y_continuous(limits = c(min(rast$north), max(rast$north))) +
+  ggplot2::geom_point() + 
+  ggplot2::ggtitle("raster cells of Rotterdam by district")
+```
+
+
+## Distance and proximity matrices
+Here we concern ourselves with the calculation of proximity matrices.  
+We will need quite a bit of RAM again, so we start by clearing the environment and then we load what we need.
+```{r, warning = FALSE, message = FALSE, results = FALSE}
+rm(list = ls()); gc() 
+#.rs.restartR() # Use if short on RAM and garbage collection doesn't help
+library("geosphere")
+load("./geoData/geoData.RData")
+```
+
+Next we calculate all distances between cells. Data is stored in big matrices bundled in the list *distances*: we produce one matrix per district.  
+Likewise, we now divide up the complete raster *rast* into portions, one for each district, and we are going to save the portions in a new list called *raster*. The complete raster of a district will have some padding, i.e. some cells around the district, which allows us to place agents outside of the original boundary.  
+*This will take a while.*
+```{r, warning = FALSE, message = FALSE, results = FALSE}
+# We temporarily use again the RD coordinates because of their convenience:
+rast$eastRD <- as.numeric(substr(
+  as.character(rast$rdCoords),
+  start = 2,
+  stop = 5
+)) * 100
+rast$northRD <- as.numeric(substr(
+  as.character(rast$rdCoords),
+  start = 7,
+  stop = length(as.character(rast$rdCoords))
+)) * 100
+vk$eastRD <- as.numeric(substr(
+  as.character(vk$rdCoords),
+  start = 2,
+  stop = 5
+)) * 100
+vk$northRD <- as.numeric(substr(
+  as.character(vk$rdCoords),
+  start = 7,
+  stop = length(as.character(rast$rdCoords))
+)) * 100
+
+raster <- list()
+distances <- list()
+
+
+for (d in 1:length(districtsList)) { # For each district...
+  print(paste0(
+    "District ", d, " of ", length(districtsList), ": ",
+    districtsNames[d],
+    ". Calculating distance matrix."
+  ))
+  
+  # ... we select the square units that belong to that district...
+  dvk <- subset(vk, vk$idDistrict == districtsList[d])
+  
+  
+  # ... and cut a portion of the complete raster that includes the district plus
+  # some padding around it.
+  padding <- 2000
+  minEast <- min(dvk$eastRD) - padding
+  maxEast <- max(dvk$eastRD) + padding
+  minNorth <- min(dvk$northRD) - padding
+  maxNorth <- max(dvk$northRD) + padding
+  dRast <- subset(
+    rast,
+    rast$eastRD >= minEast & rast$eastRD <= maxEast &
+      rast$northRD >= minNorth & rast$northRD <= maxNorth
+  )
+  #plot(dRast$east, dRast$north); points(dvk$east, dvk$north, col = "red")
+  print(Sys.time())
+  
+  # Removing unnecessary variables
+  dRast$eastRD <- NULL; dRast$northRD <- NULL
+  
+  # Calculating the distance among all square units of the cropped raster:
+  distmat <- matrix(NA, nrow = nrow(dRast), ncol = nrow(dRast))
+  coords <- as.matrix(cbind(dRast$east, dRast$north))
+  for (i in 1:nrow(dRast)) {
+    distmat[i,] <- geosphere::distMeeus(
+      p1 = coords[i,],
+      p2 = coords
+    )
+  }
+  #image(distmat)
+  
+  # And we save:
+  #  - the distance matrix of each district in the list "distances";
+  #  - the cropped raster of each district in the list "raster"
+  distances[[d]] <- distmat
+  raster[[d]] <- dRast
+}
+```
+
+We can now clean up. First, we remove the variables we don't need. Then we adjust the diagonal of each of the distance matrices, which currently reads zero (because the distance of a square unit from itself is nil). We replace these distances on the diagonal with approx. 52.14 meters, which is the average distance between points in a 100-by-100 meters square area.  
+Then we save our progress.
+```{r}
+#rast$eastRD <- NULL; rast$northRD <- NULL
+vk$eastRD <- NULL; vk$northRD <- NULL
+
+for (d in 1:length(districtsList)) diag(distances[[d]]) <- 52.140543316
+
+districts <- data.frame(
+  id = districtsList,
+  name = districtsNames
+)
+
+save(
+  vk, raster, districts, distances,
+  file = "./geoData/geoData.RData"
+)
+#save(rast, file = "./geoData/rast.RData")
+```
+
+
+
