@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Importing data
 Loading squares data.  
 *vk* is where we store the rasterized demographic statistics from the CBS;  
-*rast* is where we store the full raster, including the cells unavailable in *vk* because uninhabited. This will come handy when we'll move agents around and some of them might be placed in cells that don't exist in *vk* but are present in *rast*.
+*rast* is where we store the full raster, including the cells unavailable in *vk* because uninhabited. This will come handy when we'll move agents around and some of them might be placed in cells that don't exist in *vk* but are present in *rast*.  
 *Note: loading these datasets takes several minutes and requires a generous amount of memory.*
 ```{r, warning = FALSE, message = FALSE, results = FALSE}
 library("rgdal")

@@ -174,42 +174,16 @@ pre code {
 <p>Loading squares data.<br />
 <em>vk</em> is where we store the rasterized demographic statistics from the CBS;<br />
 <em>rast</em> is where we store the full raster, including the cells unavailable in <em>vk</em> because uninhabited. This will come handy when we’ll move agents around and some of them might be placed in cells that don’t exist in <em>vk</em> but are present in <em>rast</em>. <em>Note: loading these datasets takes several minutes and requires a generous amount of memory.</em></p>
-<pre class="r"><code>library(&quot;rgdal&quot;)</code></pre>
-<pre><code>## Loading required package: sp</code></pre>
-<pre><code>## Please note that rgdal will be retired by the end of 2023,
-## plan transition to sf/stars/terra functions using GDAL and PROJ
-## at your earliest convenience.
-## 
-## rgdal: version: 1.5-27, (SVN revision 1148)
-## Geospatial Data Abstraction Library extensions to R successfully loaded
-## Loaded GDAL runtime: GDAL 3.2.1, released 2020/12/29
-## Path to GDAL shared files: C:/Users/UCD/Documents/R/win-library/4.1/rgdal/gdal
-## GDAL binary built with GEOS: TRUE 
-## Loaded PROJ runtime: Rel. 7.2.1, January 1st, 2021, [PJ_VERSION: 721]
-## Path to PROJ shared files: C:/Users/UCD/Documents/R/win-library/4.1/rgdal/proj
-## PROJ CDN enabled: FALSE
-## Linking to sp version:1.4-5
-## To mute warnings of possible GDAL/OSR exportToProj4() degradation,
-## use options(&quot;rgdal_show_exportToProj4_warnings&quot;=&quot;none&quot;) before loading sp or rgdal.
-## Overwritten PROJ_LIB was C:/Users/UCD/Documents/R/win-library/4.1/rgdal/proj</code></pre>
-<pre class="r"><code>library(&quot;sp&quot;)
+<pre class="r"><code>library(&quot;rgdal&quot;)
+library(&quot;sp&quot;)
 vk &lt;- rgdal::readOGR(
   dsn = &quot;./geoData/2021-cbs_vk100_2020_v1&quot;,
   layer = &quot;CBS_vk100_2020_v1&quot;
-)</code></pre>
-<pre><code>## OGR data source with driver: ESRI Shapefile 
-## Source: &quot;C:\Users\UCD\OneDrive\Progetto\w\calibration study 2\spatial-opinion-dynamics\geoData\2021-cbs_vk100_2020_v1&quot;, layer: &quot;CBS_vk100_2020_v1&quot;
-## with 383359 features
-## It has 34 fields
-## Integer64 fields read as strings:  INWONER MAN VROUW INW_014 INW_1524 INW_2544 INW_4564 INW_65PL P_NL_ACHTG P_WE_MIG_A P_NW_MIG_A AANTAL_HH TOTHH_EENP TOTHH_MPZK HH_EENOUD HH_TWEEOUD WONING WONVOOR45 WON_4564 WON_6574 WON_7584 WON_8594 WON_9504 WON_0514 WON_1524 WON_MRGEZ P_KOOPWON P_HUURWON WON_HCORP WON_NBEW WOZWONING UITKMINAOW</code></pre>
-<pre class="r"><code>rast &lt;- rgdal::readOGR(
+)
+rast &lt;- rgdal::readOGR(
   dsn = &quot;./geoData/NL_vierkant_100meter_bij_100meter&quot;,
   layer = &quot;NL_vierkant100m&quot;
 )</code></pre>
-<pre><code>## OGR data source with driver: ESRI Shapefile 
-## Source: &quot;C:\Users\UCD\OneDrive\Progetto\w\calibration study 2\spatial-opinion-dynamics\geoData\NL_vierkant_100meter_bij_100meter&quot;, layer: &quot;NL_vierkant100m&quot;
-## with 3723288 features
-## It has 1 fields</code></pre>
 <p>We get rid of the shape information and only keep what we need: the coordinates of each square and its demographic statistics. We also remove all squares with fewer than five residents (<em>vkd$INWONER == -99997</em>), as the demographic composition of these squares is not provided.</p>
 <pre class="r"><code>vk &lt;- vk@data
 vk$INWONER &lt;- as.numeric(vk$INWONER)
@@ -220,15 +194,10 @@ vk &lt;- subset(vk, vk$INWONER != -99997)</code></pre>
   dsn = &quot;./geoData/WijkBuurtkaart_2019_v3&quot;,
   layer = &quot;buurt_2019_v3&quot;
 )</code></pre>
-<pre><code>## OGR data source with driver: ESRI Shapefile 
-## Source: &quot;C:\Users\UCD\OneDrive\Progetto\w\calibration study 2\spatial-opinion-dynamics\geoData\WijkBuurtkaart_2019_v3&quot;, layer: &quot;buurt_2019_v3&quot;
-## with 13689 features
-## It has 206 fields
-## Integer64 fields read as strings:  IND_WBI DEK_PERC OAD STED BEV_DICHTH AANT_INW AANT_MAN AANT_VROUW P_00_14_JR P_15_24_JR P_25_44_JR P_45_64_JR P_65_EO_JR P_ONGEHUWD P_GEHUWD P_GESCHEID P_VERWEDUW GEBOO_TOT P_GEBOO STERFT_TOT P_STERFT AANTAL_HH P_EENP_HH P_HH_Z_K P_HH_M_K P_WEST_AL P_N_W_AL P_MAROKKO P_ANT_ARU P_SURINAM P_TURKIJE P_OVER_NW A_BED_A A_BED_BF A_BED_GI A_BED_HJ A_BED_KL A_BED_MN A_BED_RU A_BEDV WONINGEN WOZ P_1GEZW P_MGEZW P_BEWNDW P_KOOPWON P_HUURWON P_HUURCORP P_HUUROVVH P_HUKO_ONB P_WONT2000 P_WONV2000 P_LEEGSW G_GAS_TOT G_GAS_APP G_GAS_TUS G_GAS_HOEK G_GAS_21K G_GAS_VRY G_GAS_HU G_GAS_KO G_ELEK_TOT G_ELEK_APP G_ELEK_TUS G_ELEK_HOE G_ELEK_21K G_ELEK_VRY G_ELE_HU G_ELE_KO P_ARB_PP P_ARB_WN P_ARB_ZS AANT_INK2 INK_ONTV2 INK_INW2 P_LAAGINKP P_HOOGINKP P_LAAGINKH P_HOOGINKH P_SOCMINH P_LKOOPKRH AO_UIT_TOT WW_UIT_TOT WWB_UITTOT A_SOZ_OW A_JZ_TN A_WMO_T P_WMO_T AUTO_TOT AUTO_LAND MOTOR_2W A_BST_B A_BST_NB OPP_TOT OPP_LAND OPP_WATER</code></pre>
 </div>
 <div id="formatting-coordinates" class="section level2">
 <h2>Formatting coordinates</h2>
-<p>Defining a function that converts the coordinates from CBS’s own format to wgs84</p>
+<p>Defining a function that converts the coordinates from the <em>Rijksdriehoek</em> format to WGS84:</p>
 <pre class="r"><code>rd2wgs84 &lt;- function(X, Y)
 {
   #http://www.dekoepel.nl/pdf/Transformatieformules.pdf
@@ -359,11 +328,9 @@ vk$WK_CODE &lt;- vkbu$WK_CODE
 vk$GM_CODE &lt;- vkbu$GM_CODE
 vk$GM_NAAM &lt;- vkbu$GM_NAAM
 vk$POSTCODE &lt;- vkbu$POSTCODE
-rm(vkbu, vksp, vkWGS84, rastWGS84, llCRS); gc() # some memory management</code></pre>
-<pre><code>##            used  (Mb) gc trigger    (Mb)  max used    (Mb)
-## Ncells  8854837 472.9  277074066 14797.4 353620925 18885.4
-## Vcells 70729027 539.7  239282471  1825.6 373878860  2852.5</code></pre>
-<pre class="r"><code>rastbu &lt;- sp::over(rast, buurtShape)
+rm(vkbu, vksp, vkWGS84, rastWGS84, llCRS); gc() # some memory management
+
+rastbu &lt;- sp::over(rast, buurtShape)
 rast$BU_CODE &lt;- rastbu$BU_CODE
 rast$BU_NAAM &lt;- rastbu$BU_NAAM
 rast$WK_CODE &lt;- rastbu$WK_CODE
@@ -371,16 +338,13 @@ rast$GM_CODE &lt;- rastbu$GM_CODE
 rast$GM_NAAM &lt;- rastbu$GM_NAAM
 rast$POSTCODE &lt;- rastbu$POSTCODE
 rm(rastbu, buurtShape); gc()</code></pre>
-<pre><code>##            used  (Mb) gc trigger   (Mb)  max used    (Mb)
-## Ncells  8289259 442.7   46485316 2482.6 353620925 18885.4
-## Vcells 84871782 647.6  725454306 5534.8 893197908  6814.6</code></pre>
 <p>We save our progress so far:</p>
 <pre class="r"><code>save(vk, rast, file = &quot;./geoData/geoData.RData&quot;)
 #.rs.restartR() # Restarts the R session, if garbage collection fails (it does occasionally on Rstudio)</code></pre>
 </div>
 <div id="recoding-variables-and-trimming-maps" class="section level2">
 <h2>Recoding variables and trimming maps</h2>
-<p>Loading our file and renaming some variables. <em>INWONER</em> is the density, or number of residents, of each square; <em>P_NW_MIG_A</em> is the percentage of residents with a non-western migration background load(“./geoData/geoData.RData”)</p>
+<p>Loading our file and renaming some variables. <em>INWONER</em> is the density, or number of residents, of each square; <em>P_NW_MIG_A</em> is the percentage of residents with a non-western migration background</p>
 <pre class="r"><code>load(&quot;./geoData/geoData.RData&quot;)
 vk$density &lt;- vk$INWONER
 vk$pnw &lt;- as.numeric(vk$P_NW_MIG_A)</code></pre>
@@ -418,7 +382,7 @@ districtsNames &lt;- c(
 )
 vkR &lt;- subset(vk, vk$WK_CODE %in% districtsList)</code></pre>
 <p>Remember how we have a dataframe <em>rast</em> that includes the cells not present in <em>vk</em> because uninhabited? Well, now it’s time we trim <em>rast</em>, keeping only the cells within the boundary of Rotterdam. We add some padding: in other words, we also keep cells that are “close” to the boundary of Rotterdam. We need this padding when we randomize agents’ position, and some agents might be placed just outside of the original boundary. So:</p>
-<pre class="r"><code>padding &lt;- 2000
+<pre class="r"><code>padding &lt;- 2000 # 2 km
 minEast &lt;- min(vkR$east) - padding
 maxEast &lt;- max(vkR$east) + padding
 minNorth &lt;- min(vkR$north) - padding
@@ -503,16 +467,14 @@ ggplot2::ggplot(
 <div id="distance-and-proximity-matrices" class="section level2">
 <h2>Distance and proximity matrices</h2>
 <p>Here we concern ourselves with the calculation of proximity matrices.<br />
-We will need quite a bit of RAM again, so we start by clearing the environment and loading what we need.</p>
-<pre class="r"><code>rm(list = ls()); gc() </code></pre>
-<pre><code>##            used (Mb) gc trigger   (Mb)  max used    (Mb)
-## Ncells  1136660 60.8   37188253 1986.1 353620925 18885.4
-## Vcells 10385334 79.3  580363445 4427.9 893197908  6814.6</code></pre>
-<pre class="r"><code>#.rs.restartR()
+We will need quite a bit of RAM again, so we start by clearing the environment and then we load what we need.</p>
+<pre class="r"><code>rm(list = ls()); gc() 
+#.rs.restartR() # Use if short on RAM and garbage collection doesn&#39;t help
 library(&quot;geosphere&quot;)
 load(&quot;./geoData/geoData.RData&quot;)</code></pre>
 <p>Next we calculate all distances between cells. Data is stored in big matrices bundled in the list <em>distances</em>: we produce one matrix per district.<br />
-Likewise, we now divide up the complete raster <em>rast</em> into portions, one for each district, and we are going to save the portions in a new list called <em>raster</em>. The complete raster of a district will have some padding, i.e. some cells around the district, which allows us to place agents outside of the original boundary. <em>This will take a while.</em></p>
+Likewise, we now divide up the complete raster <em>rast</em> into portions, one for each district, and we are going to save the portions in a new list called <em>raster</em>. The complete raster of a district will have some padding, i.e. some cells around the district, which allows us to place agents outside of the original boundary.<br />
+<em>This will take a while.</em></p>
 <pre class="r"><code># We temporarily use again the RD coordinates because of their convenience:
 rast$eastRD &lt;- as.numeric(substr(
   as.character(rast$rdCoords),
@@ -585,30 +547,6 @@ for (d in 1:length(districtsList)) { # For each district...
   distances[[d]] &lt;- distmat
   raster[[d]] &lt;- dRast
 }</code></pre>
-<pre><code>## [1] &quot;District 1 of 12: Stadscentrum. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:31:58 CET&quot;
-## [1] &quot;District 2 of 12: Delfshaven. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:32:05 CET&quot;
-## [1] &quot;District 3 of 12: Overschie. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:32:12 CET&quot;
-## [1] &quot;District 4 of 12: Noord. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:32:33 CET&quot;
-## [1] &quot;District 5 of 12: Hillegersberg-Schiebroek. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:32:40 CET&quot;
-## [1] &quot;District 6 of 12: Kralingen-Crooswijk. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:32:56 CET&quot;
-## [1] &quot;District 7 of 12: Feijenoord. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:33:11 CET&quot;
-## [1] &quot;District 8 of 12: IJsselmonde. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:33:22 CET&quot;
-## [1] &quot;District 9 of 12: Pernis. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:33:37 CET&quot;
-## [1] &quot;District 10 of 12: Prins Alexander. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:33:40 CET&quot;
-## [1] &quot;District 11 of 12: Charlois. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:34:31 CET&quot;
-## [1] &quot;District 12 of 12: Hoogvliet. Calculating distance matrix.&quot;
-## [1] &quot;2022-01-27 16:34:54 CET&quot;</code></pre>
 <p>We can now clean up. First, we remove the variables we don’t need. Then we adjust the diagonal of each of the distance matrices, which currently reads zero (because the distance of a square unit from itself is nil). We replace these distances on the diagonal with approx. 52.14 meters, which is the average distance between points in a 100-by-100 meters square area.<br />
 Then we save our progress.</p>
 <pre class="r"><code>#rast$eastRD &lt;- NULL; rast$northRD &lt;- NULL
